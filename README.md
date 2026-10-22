@@ -57,7 +57,7 @@ With real data the response can be a `survival::Surv` object, for example `msms(
 
 ## Reproducing the paper
 
-The simulation study, the real-data analyses and the SCQR comparators (He, Pan, Tan and Zhou, 2022; the authors' C++ code) are in the separate replication materials of the paper. They implement the same algorithms as this package.
+The simulation study, the real-data analyses and the SCQR comparators (He, Pan, Tan and Zhou, 2022; the authors' C++ code) are in the replication materials of the paper, https://github.com/zili-cuhk/cqrfdr-replication. They implement the same algorithms as this package.
 
 ## References
 

@@ -1,0 +1,238 @@
+%\VignetteIndexEntry{FDR-controlled variable selection for censored quantile regression}
+%\VignetteEngine{utils::Sweave}
+%\VignetteEncoding{UTF-8}
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parindent}{0pt}\setlength{\parskip}{6pt}
+\title{\texttt{cqrfdr}: FDR-controlled variable selection for\\ high-dimensional censored quantile regression}
+\author{Jinzhao Yu and Zili Liu}
+\date{Package version \Sexpr{packageVersion("cqrfdr")}}
+\begin{document}
+\SweaveOpts{concordance=FALSE, keep.source=TRUE}
+\maketitle
+
+<<setup, echo=FALSE>>=
+options(width = 80, digits = 4)
+@
+
+\section{The problem}
+
+We observe $Y_i = \min(\log T_i, \log C_i)$, $\delta_i = 1\{T_i \le C_i\}$ and
+covariates $X_i \in \mathbb{R}^p$, with $p$ possibly larger than $n$, and assume
+the linear quantile model $Q_{\log T}(u \mid X) = \beta_0(u) + X^\top\beta(u)$ for
+$u \in [\nu, \tau]$. The goal is to select the covariates with
+$\beta_j(\tau) \ne 0$ while controlling the false discovery rate
+$\mathrm{FDR} = E[\#\text{false selections} / (\#\text{selections} \vee 1)]$
+at a nominal level $q$.
+
+\texttt{ssms()} implements the single-split mirror-statistic procedure (SS-MS):
+\begin{enumerate}
+\item Split the data at random into halves $D_1$ and $D_2$.
+\item On $D_1$, fit the $L_1$-penalized sequential Peng--Huang estimator
+  (L-HDCQR) on the grid $\nu = \tau_0 < \dots < \tau_L = \tau$, with the penalty
+  multiplier chosen by cross-validation, and form a screened set of at most
+  $\lfloor d/\log d \rfloor$ candidates ($d$ = number of events).
+\item On $D_2$, refit the screened model without penalty.
+\item Combine the two estimates at $\tau$ into mirror statistics
+  $M_j = \mathrm{sign}(\hat b^{(1)}_j\hat b^{(2)}_j)(|\hat b^{(1)}_j| + |\hat b^{(2)}_j|)$
+  and select $\{j: M_j \ge \hat t\}$, where $\hat t$ is the smallest $t$ with
+  $(1 + \#\{M_j \le -t\})/(\#\{M_j \ge t\} \vee 1) \le q$.
+\end{enumerate}
+
+\section{A simulated example}
+
+\texttt{sim\_cqr()} generates data from the designs of the paper's simulation
+study. Here: $n = 300$, $p = 200$, ten signals of size $0.8$ with alternating
+signs, AR(1) covariates with $\rho = 0.5$, and 30\% censoring.
+
+<<sim>>=
+library(cqrfdr)
+set.seed(2026)
+d <- sim_cqr(n = 300, p = 200, s = 10, beta = 0.8, rho = 0.5, cens = 0.3,
+             calib_n = 50000)
+c(censoring = d$cens_rate, events = sum(d$delta))
+d$beta[2:13]
+@
+
+One call gives the selection at both FDR levels (only the threshold depends on $q$).
+The grid has 20 points here to keep the vignette fast; the default is 40.
+
+<<ssms>>=
+set.seed(1)
+fit <- ssms(d$x, d$y, d$delta, tau = 0.5, q = c(0.1, 0.2), n_grid = 20)
+fit
+@
+
+<<eval>>=
+truth <- paste0("X", d$active)
+rbind(`q = 0.1` = fdp_power(selected(fit, q = 0.1), truth),
+      `q = 0.2` = fdp_power(selected(fit, q = 0.2), truth))
+@
+
+\texttt{summary()} lists the screened candidates with both half-sample
+coefficients and the mirror statistic; \texttt{plot()} shows the ordered mirror
+statistics with the two thresholds. Null covariates have mirror statistics
+symmetric about zero, which is what the threshold exploits.
+
+<<summary>>=
+head(summary(fit), 12)
+@
+
+\begin{center}
+<<plot, fig=TRUE, width=7, height=4.2, echo=TRUE>>=
+plot(fit)
+@
+\end{center}
+
+\section{Main options}
+
+\begin{description}
+\item[\texttt{tau}, \texttt{nu}, \texttt{n\_grid}] target quantile and the grid
+  $\texttt{seq(nu, tau, length.out = n\_grid)}$. The target must be estimable
+  under the censoring: if few subjects remain at risk at the $\tau$-th quantile,
+  the path stops with status \texttt{"stage1\_no\_root"}.
+\item[\texttt{lambda}] \texttt{"cv"} (default): $K$-fold CV of the held-out
+  Peng--Huang loss over multipliers of the pivotal penalty;
+  \texttt{"pivotal"}: a fixed multiplier (\texttt{fixed\_mult}), much faster.
+\item[\texttt{screen}] \texttt{"path"} (default) fills the candidate budget in
+  the order in which covariates enter the lasso path below the CV penalty, which
+  protects the screening of moderate signals; \texttt{"cv"} keeps the CV support only.
+\item[\texttt{screen\_cap}] \texttt{"d2"} (default, the paper) or \texttt{"d1"}
+  (events in the first half, so the screen depends on $D_1$ only), an integer, or
+  \texttt{"none"}.
+\item[\texttt{offset}] 1 for the threshold $U_+$ with the finite-sample bound; 0
+  for the threshold of Dai et al.\ (2023). With \texttt{offset = 1} a nonempty
+  selection has at least $\lceil 1/q\rceil$ elements, so with fewer than $1/q$
+  signals SS-MS selects nothing.
+\item[\texttt{cores}] parallel CV fits on Unix-alikes.
+\end{description}
+
+Results depend on the random split, the folds and the Monte Carlo pivotal
+penalty; set a seed for reproducibility.
+
+\section{Multiple splitting: MS-MS}
+
+The selection of SS-MS depends on the random split. \texttt{msms()} runs SS-MS on
+$B$ independent random splits and aggregates the selections through the
+inclusion rates of Dai et al.\ (2023),
+$I_j = B^{-1}\sum_b 1\{j \in \hat S^{(b)}\}/(|\hat S^{(b)}| \vee 1)$: the
+covariates with the smallest rates are removed until their total rate exceeds
+$q$. The penalty multiplier is chosen once by CV and reused in all splits, and
+ties are broken at random. The paper uses $B = 50$; $B = 10$ keeps the vignette
+short.
+
+<<msms>>=
+set.seed(2)
+fs <- msms(d$x, d$y, d$delta, tau = 0.5, q = c(0.1, 0.2), B = 10, n_grid = 20)
+fs
+rbind(`q = 0.1` = fdp_power(selected(fs, 0.1), truth),
+      `q = 0.2` = fdp_power(selected(fs, 0.2), truth))
+fs$share_empty      # share of splits whose own SS-MS selection was empty
+@
+
+MS-MS is more conservative than SS-MS: covariates selected in only a few splits
+are dropped. Two diagnostics are useful on real data. A large share of empty
+splits means that the cutoff $U_+$ is often infeasible (too few signals, or a
+screening cap that is too small; see below). Running \texttt{msms()} twice with
+different seeds and comparing the selections (for example by the Jaccard index)
+shows how much of the selection is due to the random splits.
+
+\section{Comparators}
+
+The comparators of the paper are available with the settings of their original
+publications.
+\begin{itemize}
+\item \texttt{ds()}: the single data-splitting procedure of Dai et al.\ (2023):
+  candidate set = support of the cross-validated lasso (10-fold CV, no cap),
+  unpenalized refit, cutoff without the offset.
+\item \texttt{mds()}: their multiple data-splitting procedure: $B$ complete DS
+  fits, each with its own 10-fold CV, aggregated with their selection rule.
+\item \texttt{hdcqr(lambda = "zheng")}: L-HDCQR with the penalty sequence of
+  Zheng, Peng and He (2018), whose support at $\tau$ is a selection without FDR
+  guarantee. \texttt{hdcqr()} with the default \texttt{lambda = "cv"} uses one
+  cross-validated penalty level instead and also returns coefficients and
+  predictions.
+\end{itemize}
+
+<<comparators>>=
+set.seed(3)
+fd <- ds(d$x, d$y, d$delta, tau = 0.5, q = c(0.1, 0.2), n_grid = 20)
+fdp_power(selected(fd, 0.2), truth)
+fz <- hdcqr(d$x, d$y, d$delta, tau = 0.5, n_grid = 20, lambda = "zheng")
+fdp_power(selected(fz), truth)
+fh <- hdcqr(d$x, d$y, d$delta, tau = 0.5, n_grid = 20)
+round(coef(fh, tau = c(0.25, 0.5))[1:6, ], 3)
+@
+
+<<mds, eval=FALSE>>=
+## each of the B splits runs its own 10-fold CV, so this takes several minutes
+fm <- mds(d$x, d$y, d$delta, tau = 0.5, q = c(0.1, 0.2), B = 50)
+@
+
+\section{Using your own data}
+
+The response can be a \texttt{survival::Surv} object, in which case the times are
+log-transformed. Covariates with no variation on a half sample must be removed
+first; heavy-tailed covariates can be standardized by median and MAD with
+\texttt{std = "robust"}.
+
+<<own, eval=FALSE>>=
+library(survival)
+X <- as.matrix(my_data[, candidate_columns])
+fit <- msms(X, Surv(my_data$time, my_data$status), tau = 0.5, q = 0.1, cores = 4)
+selected(fit, q = 0.1)
+@
+
+Two conditions behind the FDR guarantee can be checked before any selection is
+examined. First, the cutoff $U_+$ needs at least $1/q$ selections; with $d_2$
+events in the second half, the candidate set has at most
+$\lfloor d_2/\log d_2\rfloor$ covariates, and the paper requires this cap to be
+at least $25$, so that $10$ selections at $q = 0.1$ do not need most of the
+candidates to be signals. Second, the first-stage screen should retain the
+active covariates. A plasmode simulation on the observed covariate matrix
+checks both: draw an active set, generate responses from the linear quantile
+model with censoring calibrated to the data, and record the FDR and power.
+
+<<plasmode, eval=FALSE>>=
+plasmode_rep <- function(X, cens_rate, s = 10, b = 0.1, tau = 0.5, q = 0.1) {
+  Z <- scale(X); n <- nrow(Z)
+  act <- sort(sample(ncol(Z), s))
+  logT <- drop(Z[, act] %*% (b * sample(c(-1, 1), s, TRUE))) + rnorm(n)
+  g <- rnorm(n)
+  c0 <- uniroot(function(c) mean(c + g < logT) - cens_rate, range(logT) + c(-10, 10))$root
+  y <- pmin(logT, c0 + g); delta <- as.integer(logT <= c0 + g)
+  f <- msms(Z, y, delta, tau = tau, q = q)
+  fdp_power(selected(f, q), colnames(Z)[act])
+}
+@
+
+\section{A small Monte Carlo study}
+
+The code below estimates the FDR and power of SS-MS over replicated data sets,
+reusing the calibrated censoring location \texttt{c0}.
+
+<<mc, eval=FALSE>>=
+reps <- 100
+res <- t(vapply(seq_len(reps), function(r) {
+  set.seed(r)
+  dr <- sim_cqr(n = 300, p = 200, beta = 0.8, cens = 0.3, c0 = d$c0)
+  f <- ssms(dr$x, dr$y, dr$delta, q = 0.2)
+  fdp_power(selected(f, 0.2), paste0("X", dr$active))
+}, numeric(5)))
+colMeans(res[, c("FDP", "power")])   # FDR and average power
+@
+
+\section*{References}
+\small
+Dai, C., Lin, B., Xing, X.\ and Liu, J.\,S.\ (2023). False discovery rate control
+via data splitting. \emph{Journal of the American Statistical Association}.
+
+Peng, L.\ and Huang, Y.\ (2008). Survival analysis with quantile regression
+models. \emph{Journal of the American Statistical Association}, 103, 637--649.
+
+Zheng, Q., Peng, L.\ and He, X.\ (2018). High dimensional censored quantile
+regression. \emph{The Annals of Statistics}, 46, 308--343.
+
+\end{document}

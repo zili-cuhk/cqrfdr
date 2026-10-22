@@ -1,0 +1,11 @@
+export(ssms, ds, mds, msms, hdcqr, hdcqr_path, pivotal_lambda, mirror_stat, mirror_threshold,
+       selected, sim_cqr, fdp_power)
+importFrom(stats, coef, predict)
+S3method(selected, cqrfdr)
+S3method(selected, hdcqr)
+S3method(print, cqrfdr)
+S3method(summary, cqrfdr)
+S3method(plot, cqrfdr)
+S3method(print, hdcqr)
+S3method(coef, hdcqr)
+S3method(predict, hdcqr)

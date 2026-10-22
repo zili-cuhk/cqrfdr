@@ -1,0 +1,10 @@
+bibentry(
+  bibtype = "Unpublished",
+  title   = "{FDR}-Controlled Variable Selection for High-Dimensional Censored Quantile Regression",
+  author  = c(person("Jinzhao", "Yu"), person("Zili", "Liu")),
+  year    = "2026",
+  note    = paste("Manuscript; R package cqrfdr version", utils::packageVersion("cqrfdr")),
+  textVersion = paste0("Yu, J. and Liu, Z. (2026). FDR-controlled variable selection for ",
+                       "high-dimensional censored quantile regression. Manuscript; R package cqrfdr ",
+                       utils::packageVersion("cqrfdr"), ".")
+)

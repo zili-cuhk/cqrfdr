@@ -1,0 +1,30 @@
+Package: cqrfdr
+Type: Package
+Title: FDR-Controlled Variable Selection for High-Dimensional Censored Quantile Regression
+Version: 0.3.0
+Date: 2026-10-22
+Authors@R: c(
+    person("Jinzhao", "Yu", role = "aut"),
+    person("Zili", "Liu", role = c("aut", "cre"), email = "ZLiu20@mdanderson.org"))
+Description: Variable selection with false discovery rate control for
+    high-dimensional censored quantile regression. The single-split
+    mirror-statistic procedure (SS-MS) fits the sequential L1-penalized
+    Peng-Huang estimator of Zheng, Peng and He (2018, Annals of Statistics)
+    on one half of the data, refits the screened model without penalty on the
+    other half, and selects covariates by a data-driven threshold on mirror
+    statistics. Its multiple-splitting version (MS-MS) aggregates SS-MS over
+    many random splits through inclusion rates for a more stable selection.
+    The package also provides the single and multiple data splitting procedures
+    of Dai, Lin, Xing and Liu (2023, Journal of the American Statistical
+    Association), the penalized sequential estimator with cross-validated,
+    pivotal or Zheng-Peng-He penalties, and a simulator for the designs used in
+    the accompanying paper.
+License: GPL (>= 3)
+URL: https://github.com/zili-cuhk/cqrfdr
+BugReports: https://github.com/zili-cuhk/cqrfdr/issues
+Encoding: UTF-8
+Depends: R (>= 4.0.0)
+Imports: stats, graphics, utils, parallel
+Suggests: quantreg, survival
+VignetteBuilder: utils
+NeedsCompilation: no
